@@ -1,177 +1,242 @@
+import asyncio
+import csv
+import logging
+import json
+import os
+from datetime import datetime, timedelta
+
 import cv2
 import dlib
 import face_recognition
 import numpy as np
-import asyncio
 import websockets
-import json
-import os
-import csv
-from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "face_data.json")
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 LOG_FILE = os.path.join(BASE_DIR, "registros.csv")
+LATE_FILE = os.path.join(BASE_DIR, "atrasos.csv")
+UNKNOWN_DIR = os.path.join(BASE_DIR, "rostos_nao_cadastrados")
+EVIDENCE_DIR = os.path.join(BASE_DIR, "registros")
 PREDICTOR_FILE = os.path.join(BASE_DIR, "shape_predictor_68_face_landmarks.dat")
 FACE_MODEL_FILE = os.path.join(BASE_DIR, "dlib_face_recognition_resnet_model_v1.dat")
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logging.basicConfig(
+    filename=os.path.join(LOG_DIR, "reconhecimento.log"),
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    encoding="utf-8",
+)
+logger = logging.getLogger(__name__)
+
+DEFAULT_CONFIG = {
+    "manha_inicio": "07:30",
+    "manha_atraso": "07:30",
+    "manha_fim": "12:30",
+    "tarde_inicio": "13:30",
+    "tarde_atraso": "13:30",
+    "tarde_fim": "17:25",
+    "cooldown_minutos": 60,
+    "tolerancia": 0.5,
+    "unknown_cooldown_minutos": 5,
+}
 
 for model_file in (PREDICTOR_FILE, FACE_MODEL_FILE):
     if not os.path.exists(model_file):
-        raise FileNotFoundError(
-            f"Modelo facial ausente: {model_file}. "
-            "Baixe os modelos indicados no README.md e coloque-os em backend."
-        )
-
-# Carrega dados conhecidos
-with open(DATA_FILE, "r", encoding="utf-8") as f:
-    face_data = json.load(f)
-
-known_people = [p for p in face_data if len(p.get("encoding", [])) == 128]
-known_encodings = [np.array(p["encoding"]) for p in known_people]
-known_info = [(p["nome"], p["idade"], p["profissao"]) for p in known_people]
-last_logged = {}
+        raise FileNotFoundError(f"Modelo facial ausente: {model_file}")
 
 
-def registrar_acesso(nome, idade, profissao):
-    agora = datetime.now()
-    ultimo_registro = last_logged.get(nome)
-    if ultimo_registro and (agora - ultimo_registro).total_seconds() < 60:
-        return
+def carregar_json(caminho, padrao):
+    try:
+        with open(caminho, "r", encoding="utf-8") as arquivo:
+            return json.load(arquivo)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return padrao
 
-    arquivo_novo = not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0
-    with open(LOG_FILE, "a", newline="", encoding="utf-8-sig") as arquivo:
-        writer = csv.writer(arquivo, delimiter=";")
-        if arquivo_novo:
-            writer.writerow(["Data", "Horario", "Nome", "Idade", "Profissao"])
-        writer.writerow([
-            agora.strftime("%d/%m/%Y"),
-            agora.strftime("%H:%M:%S"),
-            nome,
-            idade,
-            profissao,
-        ])
-    last_logged[nome] = agora
 
-# Modelos
+def salvar_json(caminho, dados):
+    temporario = f"{caminho}.tmp"
+    with open(temporario, "w", encoding="utf-8") as arquivo:
+        json.dump(dados, arquivo, indent=2, ensure_ascii=False)
+    os.replace(temporario, caminho)
+
+
+if not os.path.exists(CONFIG_FILE):
+    salvar_json(CONFIG_FILE, DEFAULT_CONFIG)
+
+
+def carregar_pessoas():
+    dados = carregar_json(DATA_FILE, [])
+    pessoas = []
+    for pessoa in dados:
+        encoding = pessoa.get("encoding", [])
+        if len(encoding) != 128:
+            continue
+        pessoas.append({
+            "id": pessoa.get("id", pessoa.get("nome", "")),
+            "nome": pessoa.get("nome", ""),
+            "idade": pessoa.get("idade", ""),
+            "turma": pessoa.get("turma", pessoa.get("profissao", "")),
+            "tipo_pessoa": pessoa.get("tipo_pessoa", "Aluno"),
+            "encoding": np.array(encoding),
+        })
+    return pessoas
+
 
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(PREDICTOR_FILE)
 face_rec_model = dlib.face_recognition_model_v1(FACE_MODEL_FILE)
+known_people = carregar_pessoas()
+data_file_mtime = os.path.getmtime(DATA_FILE)
+last_logged = {}
+last_unknown = []
 
 
-def get_face_encodings(frame):
-    encodings = []
-    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-    rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-    faces = detector(rgb_small)
+def config_atual():
+    configuracao = DEFAULT_CONFIG.copy()
+    configuracao.update(carregar_json(CONFIG_FILE, {}))
+    return configuracao
 
+
+def hora_minutos(valor):
+    hora, minuto = map(int, valor.split(":")[:2])
+    return hora * 60 + minuto
+
+
+def status_horario(agora, configuracao):
+    minutos = agora.hour * 60 + agora.minute
+    turnos = (
+        ("manha", "manha_inicio", "manha_atraso", "manha_fim"),
+        ("tarde", "tarde_inicio", "tarde_atraso", "tarde_fim"),
+    )
+    for turno, inicio, atraso, fim in turnos:
+        inicio_min = hora_minutos(configuracao[inicio])
+        atraso_min = hora_minutos(configuracao[atraso])
+        fim_min = hora_minutos(configuracao[fim])
+        if inicio_min <= minutos <= fim_min:
+            return turno, minutos >= atraso_min
+    return None, False
+
+
+def anexar_csv(caminho, cabecalho, linha):
+    novo = not os.path.exists(caminho) or os.path.getsize(caminho) == 0
+    with open(caminho, "a", newline="", encoding="utf-8-sig") as arquivo:
+        escritor = csv.writer(arquivo, delimiter=";")
+        if novo:
+            escritor.writerow(cabecalho)
+        escritor.writerow(linha)
+
+
+def salvar_imagem(caminho, frame, box):
+    top, right, bottom, left = box
+    altura, largura = frame.shape[:2]
+    margem = 35
+    recorte = frame[max(0, top - margem):min(altura, bottom + margem), max(0, left - margem):min(largura, right + margem)]
+    if recorte.size:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        cv2.imwrite(caminho, recorte)
+
+
+def registrar_passagem(pessoa, frame, box):
+    agora = datetime.now()
+    configuracao = config_atual()
+    chave = pessoa["id"]
+    ultimo = last_logged.get(chave)
+    cooldown = timedelta(minutes=float(configuracao["cooldown_minutos"]))
+    if ultimo and agora - ultimo < cooldown:
+        return None
+
+    turno, em_atraso = status_horario(agora, configuracao)
+    data = agora.strftime("%d/%m/%Y")
+    horario = agora.strftime("%H:%M:%S")
+    tipo = pessoa["tipo_pessoa"]
+    evidencia = ""
+    if tipo == "Aluno" and em_atraso:
+        pasta = os.path.join(EVIDENCE_DIR, agora.strftime("%Y-%m-%d"))
+        nome_arquivo = f"{agora.strftime('%H-%M-%S')}_{pessoa['nome'].replace(' ', '_')}.jpg"
+        evidencia = os.path.join(pasta, nome_arquivo)
+        salvar_imagem(evidencia, frame, box)
+        anexar_csv(LATE_FILE, ["Data", "Horario", "Nome", "Turma", "Tipo", "Status", "Identificacao", "Evidencia"], [data, horario, pessoa["nome"], pessoa["turma"], tipo, "Atrasado", chave, evidencia])
+
+    anexar_csv(LOG_FILE, ["Data", "Horario", "Nome", "Idade", "Turma", "Tipo", "Turno", "Atrasado", "Identificacao", "Evidencia"], [data, horario, pessoa["nome"], pessoa["idade"], pessoa["turma"], tipo, turno or "fora_do_turno", "Sim" if em_atraso and tipo == "Aluno" else "Nao", chave, evidencia])
+    last_logged[chave] = agora
+    logger.info("Passagem reconhecida: %s (%s), atraso=%s", pessoa["nome"], tipo, em_atraso and tipo == "Aluno")
+    return {"atraso": bool(em_atraso and tipo == "Aluno"), "horario": horario, "nome": pessoa["nome"]}
+
+
+def salvar_desconhecido(frame, box, encoding):
+    global last_unknown
+    agora = datetime.now()
+    configuracao = config_atual()
+    limite = timedelta(minutes=float(configuracao["unknown_cooldown_minutos"]))
+    last_unknown = [(momento, item) for momento, item in last_unknown if agora - momento < limite]
+    if any(face_recognition.compare_faces([item], encoding, tolerance=0.48)[0] for _, item in last_unknown):
+        return False
+    pasta = os.path.join(UNKNOWN_DIR, agora.strftime("%Y-%m-%d"))
+    caminho = os.path.join(pasta, f"{agora.strftime('%H-%M-%S')}.jpg")
+    salvar_imagem(caminho, frame, box)
+    last_unknown.append((agora, encoding))
+    logger.info("Rosto nao cadastrado salvo: %s", caminho)
+    return True
+
+
+def recarregar_se_necessario():
+    global known_people, data_file_mtime
+    atual = os.path.getmtime(DATA_FILE)
+    if atual != data_file_mtime:
+        known_people = carregar_pessoas()
+        data_file_mtime = atual
+
+
+def processar_frame(frame):
+    recarregar_se_necessario()
+    pequeno = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+    rgb = cv2.cvtColor(pequeno, cv2.COLOR_BGR2RGB)
+    rostos = []
+    faces = detector(rgb)
+    conhecido = [np.array(pessoa["encoding"]) for pessoa in known_people]
+    tolerancia = float(config_atual()["tolerancia"])
     for face in faces:
-        shape = predictor(rgb_small, face)
-        encoding = face_rec_model.compute_face_descriptor(rgb_small, shape)
-        encodings.append((face, np.array(encoding)))
-    return encodings, frame
-
-
-async def handler(websocket, *args):
-    cap = cv2.VideoCapture(0)
-
-    status_frame = 0
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            continue
-
-        encodings, frame = get_face_encodings(frame)
-        rostos_json = []
-
-        acesso_liberado = False
-        status_cor = (255, 255, 0)  # Azul (analisando)
-        status_icone = "🔎"
-        status_texto = "ANALISANDO"
-
-        for face, encoding in encodings:
-            name = "Desconhecido"
-            idade = ""
-            profissao = ""
-            matches = face_recognition.compare_faces(known_encodings, encoding, tolerance=0.5)
-
+        shape = predictor(rgb, face)
+        encoding = np.array(face_rec_model.compute_face_descriptor(rgb, shape))
+        top, right, bottom, left = face.top() * 4, face.right() * 4, face.bottom() * 4, face.left() * 4
+        pessoa = None
+        if conhecido:
+            matches = face_recognition.compare_faces(conhecido, encoding, tolerance=tolerancia)
             if True in matches:
-                match_index = matches.index(True)
-                name, idade, profissao = known_info[match_index]
-                registrar_acesso(name, idade, profissao)
-                acesso_liberado = True
-                status_cor = (0, 255, 0)
-                status_icone = "✔"
-                status_texto = "ACESSO LIBERADO"
-            else:
-                status_cor = (0, 0, 255)
-                status_icone = "✖"
-                status_texto = "ACESSO BLOQUEADO"
+                pessoa = known_people[matches.index(True)]
+        box = [top, right, bottom, left]
+        if pessoa:
+            registro = registrar_passagem(pessoa, frame, box)
+            rostos.append({"top": top, "right": right, "bottom": bottom, "left": left, "nome": pessoa["nome"], "idade": pessoa["idade"], "turma": pessoa["turma"], "tipo_pessoa": pessoa["tipo_pessoa"], "reconhecido": True, "atraso": bool(registro and registro["atraso"]), "novo_registro": registro})
+        else:
+            salvou = salvar_desconhecido(frame, box, encoding)
+            rostos.append({"top": top, "right": right, "bottom": bottom, "left": left, "nome": "Rosto nao cadastrado", "idade": "", "turma": "", "tipo_pessoa": "", "reconhecido": False, "atraso": False, "novo_registro": None, "imagem_salva": salvou})
+    return rostos
 
-            x1 = face.left() * 4
-            y1 = face.top() * 4
-            x2 = face.right() * 4
-            y2 = face.bottom() * 4
 
-            # Borda animada piscando
-            thickness = 2 + ((status_frame // 10) % 3)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), status_cor, thickness)
-
-            # Balão de info com fundo escuro, afastado para a esquerda com espaçamento
-            nome_texto = f"Nome: {name}"
-            idade_texto = f"Idade: {idade} anos"
-            prof_texto = f"Profissao: {profissao}"
-
-            texts = [nome_texto, idade_texto, prof_texto] if name != "Desconhecido" else ["Desconhecido"]
-            largura_texto = max([cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)[0][0] for t in texts]) + 20
-            altura_texto = len(texts) * 30 + 20
-
-            info_x = x1 - largura_texto - 20  # margem maior à esquerda do quadrado
-            if info_x < 10:
-                info_x = 10
-            info_y = y1
-
-            cv2.rectangle(frame, (info_x - 10, info_y - 20), (info_x + largura_texto, info_y + altura_texto), (0, 0, 0), cv2.FILLED)
-
-            for i, texto in enumerate(texts):
-                cv2.putText(frame, texto, (info_x, info_y + i * 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, status_cor, 2)
-
-            rostos_json.append({
-                "top": y1,
-                "right": x2,
-                "bottom": y2,
-                "left": x1,
-                "nome": name,
-                "idade": idade,
-                "profissao": profissao
-            })
-
-        # Status geral no topo
-        if encodings:
-            mensagem = f"{status_icone}  {status_texto}"
-            (text_width, text_height), _ = cv2.getTextSize(mensagem, cv2.FONT_HERSHEY_DUPLEX, 1.2, 2)
-            box_coords = ((10, 10), (30 + text_width, 65))
-            cv2.rectangle(frame, box_coords[0], box_coords[1], status_cor, thickness=cv2.FILLED)
-            cv2.putText(frame, mensagem, (20, 50), cv2.FONT_HERSHEY_DUPLEX, 1.2, (255, 255, 255), 2)
-
-        cv2.imshow("Reconhecimento Facial", frame)
-        status_frame += 1
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-        await websocket.send(json.dumps({
-            "verificado": len(encodings) > 0,
-            "rostos": rostos_json
-        }))
-
-    cap.release()
-    cv2.destroyAllWindows()
+async def handler(websocket):
+    logger.info("Cliente de camera conectado")
+    try:
+        async for mensagem in websocket:
+            if not isinstance(mensagem, bytes):
+                continue
+            frame = cv2.imdecode(np.frombuffer(mensagem, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+            resultado = processar_frame(frame)
+            await websocket.send(json.dumps({"rostos": resultado, "verificado": bool(resultado)}))
+    except websockets.exceptions.ConnectionClosed:
+        logger.info("Cliente de camera desconectado")
+    except Exception:
+        logger.exception("Falha no processamento do frame")
 
 
 async def main():
-    print("Servidor WebSocket iniciado na porta 8765")
-    async with websockets.serve(handler, "localhost", 8765):
+    logger.info("Servidor WebSocket iniciado em ws://localhost:8765")
+    async with websockets.serve(handler, "localhost", 8765, max_size=4 * 1024 * 1024):
         await asyncio.Future()
 
 

@@ -3,7 +3,8 @@ body {
   overflow: hidden;
 }
 
-video, canvas {
+video,
+canvas {
   position: absolute;
   top: 0;
   left: 0;
@@ -19,4 +20,242 @@ video {
 canvas {
   z-index: 2;
   pointer-events: none;
+}
+:root {
+  color-scheme: dark;
+  --bg: #0e1716;
+  --panel: #172320;
+  --panel-light: #20302b;
+  --line: #30453e;
+  --text: #edf6f1;
+  --muted: #91a79e;
+  --green: #38d996;
+  --red: #ff756d;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% 0%, #1b4037 0, transparent 34%), var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", sans-serif;
+}
+.app-shell {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 26px clamp(16px, 4vw, 58px) 36px;
+}
+.topbar,
+.status-strip,
+.workspace,
+.stats-grid {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+.eyebrow {
+  margin: 0 0 7px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+h1 {
+  margin: 0;
+  font-size: clamp(27px, 4vw, 48px);
+  letter-spacing: -1px;
+}
+.clock-block {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+  color: var(--muted);
+}
+.clock-block strong {
+  color: var(--text);
+  font-size: 25px;
+}
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  background: rgba(23, 35, 32, 0.9);
+}
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.status-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 12px var(--green);
+}
+.separator {
+  color: var(--line);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.7fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+.camera-panel,
+.info-panel,
+.stats-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(23, 35, 32, 0.95);
+}
+.camera-panel {
+  overflow: hidden;
+}
+.info-panel {
+  padding: 18px;
+}
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 13px 16px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+.camera-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #07100e;
+}
+#webcam,
+#overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#webcam {
+  z-index: 1;
+}
+#overlay {
+  z-index: 2;
+  pointer-events: none;
+}
+.camera-error {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  color: var(--red);
+  background: rgba(7, 16, 14, 0.8);
+}
+.notification {
+  margin: 12px 14px 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--green);
+  color: var(--text);
+  background: #1a4939;
+}
+.empty-state {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+}
+.person-card {
+  display: grid;
+  gap: 8px;
+  min-height: 180px;
+  align-content: center;
+  padding: 18px;
+  border-left: 4px solid var(--green);
+  background: var(--panel-light);
+}
+.person-card strong {
+  font-size: 23px;
+}
+.person-card span {
+  color: var(--muted);
+}
+.person-card.unknown {
+  border-left-color: var(--red);
+}
+.last-entry {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.last-entry strong {
+  color: var(--text);
+  font-size: 14px;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+.stats-grid article {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+.stats-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stats-grid strong {
+  font-size: 27px;
+}
+.admin-link {
+  max-width: 1280px;
+  margin: 22px auto 0;
+  text-align: right;
+}
+.admin-link a {
+  color: var(--green);
+  text-decoration: none;
+}
+@media (max-width: 800px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 520px) {
+  .topbar {
+    align-items: start;
+    flex-direction: column;
+  }
+  .clock-block {
+    text-align: left;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
