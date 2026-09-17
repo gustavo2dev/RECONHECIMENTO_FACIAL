@@ -16,7 +16,6 @@ DATA_FILE = os.path.join(BASE_DIR, "face_data.json")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 LOG_FILE = os.path.join(BASE_DIR, "registros.csv")
 LATE_FILE = os.path.join(BASE_DIR, "atrasos.csv")
-UNKNOWN_DIR = os.path.join(BASE_DIR, "rostos_nao_cadastrados")
 EVIDENCE_DIR = os.path.join(BASE_DIR, "registros")
 PREDICTOR_FILE = os.path.join(BASE_DIR, "shape_predictor_68_face_landmarks.dat")
 FACE_MODEL_FILE = os.path.join(BASE_DIR, "dlib_face_recognition_resnet_model_v1.dat")
@@ -40,7 +39,6 @@ DEFAULT_CONFIG = {
     "tarde_fim": "17:25",
     "cooldown_minutos": 60,
     "tolerancia": 0.5,
-    "unknown_cooldown_minutos": 5,
 }
 
 for model_file in (PREDICTOR_FILE, FACE_MODEL_FILE):
@@ -91,7 +89,6 @@ face_rec_model = dlib.face_recognition_model_v1(FACE_MODEL_FILE)
 known_people = carregar_pessoas()
 data_file_mtime = os.path.getmtime(DATA_FILE)
 last_logged = {}
-last_unknown = []
 
 
 def config_atual():
@@ -166,22 +163,6 @@ def registrar_passagem(pessoa, frame, box):
     return {"atraso": bool(em_atraso and tipo == "Aluno"), "horario": horario, "nome": pessoa["nome"]}
 
 
-def salvar_desconhecido(frame, box, encoding):
-    global last_unknown
-    agora = datetime.now()
-    configuracao = config_atual()
-    limite = timedelta(minutes=float(configuracao["unknown_cooldown_minutos"]))
-    last_unknown = [(momento, item) for momento, item in last_unknown if agora - momento < limite]
-    if any(face_recognition.compare_faces([item], encoding, tolerance=0.48)[0] for _, item in last_unknown):
-        return False
-    pasta = os.path.join(UNKNOWN_DIR, agora.strftime("%Y-%m-%d"))
-    caminho = os.path.join(pasta, f"{agora.strftime('%H-%M-%S')}.jpg")
-    salvar_imagem(caminho, frame, box)
-    last_unknown.append((agora, encoding))
-    logger.info("Rosto nao cadastrado salvo: %s", caminho)
-    return True
-
-
 def recarregar_se_necessario():
     global known_people, data_file_mtime
     atual = os.path.getmtime(DATA_FILE)
@@ -212,8 +193,7 @@ def processar_frame(frame):
             registro = registrar_passagem(pessoa, frame, box)
             rostos.append({"top": top, "right": right, "bottom": bottom, "left": left, "nome": pessoa["nome"], "idade": pessoa["idade"], "turma": pessoa["turma"], "tipo_pessoa": pessoa["tipo_pessoa"], "reconhecido": True, "atraso": bool(registro and registro["atraso"]), "novo_registro": registro})
         else:
-            salvou = salvar_desconhecido(frame, box, encoding)
-            rostos.append({"top": top, "right": right, "bottom": bottom, "left": left, "nome": "Rosto nao cadastrado", "idade": "", "turma": "", "tipo_pessoa": "", "reconhecido": False, "atraso": False, "novo_registro": None, "imagem_salva": salvou})
+            rostos.append({"top": top, "right": right, "bottom": bottom, "left": left, "nome": "Rosto nao cadastrado", "idade": "", "turma": "", "tipo_pessoa": "", "reconhecido": False, "atraso": False, "novo_registro": None})
     return rostos
 
 

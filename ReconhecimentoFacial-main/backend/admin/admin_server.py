@@ -32,7 +32,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(DATA_FILE), "config.json")
 DEFAULT_CONFIG = {
     "manha_inicio": "07:30", "manha_atraso": "07:30", "manha_fim": "12:30",
     "tarde_inicio": "13:30", "tarde_atraso": "13:30", "tarde_fim": "17:25",
-    "cooldown_minutos": 60, "tolerancia": 0.5, "unknown_cooldown_minutos": 5,
+    "cooldown_minutos": 60, "tolerancia": 0.5,
 }
 
 
@@ -263,14 +263,11 @@ def dashboard():
     atrasos = ler_csv(LATE_FILE)
     hoje = __import__("datetime").datetime.now().strftime("%d/%m/%Y")
     do_dia = [r for r in registros if r.get("Data") == hoje]
-    pasta_desconhecidos = os.path.join(os.path.dirname(DATA_FILE), "rostos_nao_cadastrados", __import__("datetime").datetime.now().strftime("%Y-%m-%d"))
-    desconhecidos = len([nome for nome in os.listdir(pasta_desconhecidos)]) if os.path.isdir(pasta_desconhecidos) else 0
     return jsonify({
         "alunos_reconhecidos": len({r.get("Identificacao") for r in do_dia if r.get("Tipo") == "Aluno"}),
         "atrasos": len([r for r in atrasos if r.get("Data") == hoje]),
         "professores": len([r for r in do_dia if r.get("Tipo") == "Professor"]),
         "funcionarios": len([r for r in do_dia if r.get("Tipo") == "Funcionario"]),
-        "rostos_nao_cadastrados": desconhecidos,
         "ultimas_entradas": do_dia[-10:][::-1],
     })
 

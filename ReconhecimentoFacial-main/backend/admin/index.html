@@ -24,10 +24,6 @@
           ><strong id="statAlunos">0</strong>
         </article>
         <article>
-          <span>Não cadastrados hoje</span
-          ><strong id="statDesconhecidos">0</strong>
-        </article>
-        <article>
           <span>Atrasos hoje</span><strong id="statAtrasos">0</strong>
         </article>
         <article>
@@ -187,12 +183,6 @@
                 min="0.3"
                 max="0.8"
                 step="0.01" /></label
-            ><label
-              >Cooldown de desconhecido (minutos)<input
-                name="unknown_cooldown_minutos"
-                type="number"
-                min="1"
-            /></label>
           </div>
           <div class="form-actions">
             <button class="primario">Salvar configurações</button
@@ -350,7 +340,6 @@
         const dados = Object.fromEntries(new FormData(event.target));
         dados.cooldown_minutos = Number(dados.cooldown_minutos);
         dados.tolerancia = Number(dados.tolerancia);
-        dados.unknown_cooldown_minutos = Number(dados.unknown_cooldown_minutos);
         const res = await fetch("/configuracoes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -366,7 +355,6 @@
         $("statAtrasos").textContent = dados.atrasos;
         $("statProfessores").textContent = dados.professores;
         $("statFuncionarios").textContent = dados.funcionarios;
-        $("statDesconhecidos").textContent = dados.rostos_nao_cadastrados;
       }
       carregarUsuarios();
       carregarDashboard();

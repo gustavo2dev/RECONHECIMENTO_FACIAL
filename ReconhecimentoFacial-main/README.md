@@ -78,7 +78,7 @@ O painel administrativo abre automaticamente em [http://localhost:5000](http://l
 
 Quando um aluno autorizado for reconhecido no horário de atraso, o registro é salvo em `backend\atrasos.csv` e aparece no histórico. Passagens gerais ficam em `backend\registros.csv`.
 
-Rostos desconhecidos são salvos com cooldown em `backend\rostos_nao_cadastrados\AAAA-MM-DD`. Evidências de atrasos ficam em `backend\registros\AAAA-MM-DD`. Logs ficam em `backend\logs\reconhecimento.log`.
+Rostos não cadastrados continuam aparecendo com caixa vermelha, mas não são salvos em disco. Evidências de atrasos ficam em `backend\registros\AAAA-MM-DD`. Logs ficam em `backend\logs\reconhecimento.log`.
 
 ### Regras padrão
 

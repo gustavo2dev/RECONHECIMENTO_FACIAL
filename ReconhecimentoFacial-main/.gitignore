@@ -15,5 +15,4 @@ backend/registros.csv
 backend/atrasos.csv
 backend/config.json
 backend/logs/
-backend/rostos_nao_cadastrados/
 backend/registros/

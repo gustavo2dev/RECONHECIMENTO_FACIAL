@@ -75,7 +75,7 @@ function mostrarDeteccao(rostos) {
   area.className = `person-card ${rosto.reconhecido ? "known" : "unknown"}`;
   area.innerHTML = rosto.reconhecido
     ? `<strong>${rosto.nome}</strong><span>${rosto.tipo_pessoa === "Aluno" ? `${rosto.idade} anos · ${rosto.turma || "Turma não informada"}` : rosto.tipo_pessoa}</span>`
-    : `<strong>Rosto não cadastrado</strong><span>A imagem foi salva para análise.</span>`;
+    : `<strong>Rosto não cadastrado</strong><span>Nenhuma imagem foi armazenada.</span>`;
   document.getElementById("statusReconhecimento").textContent =
     rosto.reconhecido ? `${rosto.nome} identificado` : "Rosto não cadastrado";
   if (
@@ -196,8 +196,6 @@ async function atualizarDashboard() {
     document.getElementById("statProfessores").textContent = dados.professores;
     document.getElementById("statFuncionarios").textContent =
       dados.funcionarios;
-    document.getElementById("statDesconhecidos").textContent =
-      dados.rostos_nao_cadastrados;
   } catch (erro) {
     console.warn("Dashboard indisponível", erro);
   }
