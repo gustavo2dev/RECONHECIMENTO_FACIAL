@@ -5,8 +5,13 @@ import os
 import re
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ARQUIVO_JSON = os.path.join(BASE_DIR, "face_data.json")
-PASTA_FOTOS = os.path.join(BASE_DIR, "face_data")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+ARQUIVO_JSON = os.path.join(DATA_DIR, "face_data.json")
+PASTA_FOTOS = os.path.join(DATA_DIR, "face_data")
+os.makedirs(DATA_DIR, exist_ok=True)
+if not os.path.exists(ARQUIVO_JSON) and os.path.exists(os.path.join(BASE_DIR, "face_data.json")):
+    import shutil
+    shutil.copy2(os.path.join(BASE_DIR, "face_data.json"), ARQUIVO_JSON)
 
 def carregar_base():
     if os.path.exists(ARQUIVO_JSON):

@@ -8,6 +8,7 @@ const botaoCamera = document.getElementById("botaoCamera");
 let socket = null;
 let stream = null;
 let envioAtivo = false;
+let frameEmProcessamento = false;
 let cameraSolicitada = false;
 let reconexaoAgendada = false;
 let ultimaNotificacao = "";
@@ -142,12 +143,19 @@ function iniciarEnvioFrames() {
   const enviar = () => {
     if (!envioAtivo) return;
     if (video.readyState >= 2 && socket?.readyState === WebSocket.OPEN) {
+      if (frameEmProcessamento) {
+        setTimeout(enviar, 80);
+        return;
+      }
       frameCanvas.width = video.videoWidth;
       frameCanvas.height = video.videoHeight;
       frameContext.drawImage(video, 0, 0);
       frameCanvas.toBlob(
         (blob) => {
-          if (blob && socket?.readyState === WebSocket.OPEN) socket.send(blob);
+          if (blob && socket?.readyState === WebSocket.OPEN) {
+            frameEmProcessamento = true;
+            socket.send(blob);
+          }
         },
         "image/jpeg",
         0.72,
@@ -166,6 +174,7 @@ function conectarReconhecimento() {
     if (cameraSolicitada) atualizarStatusCamera(true, "Câmera funcionando");
   };
   socket.onmessage = (evento) => {
+    frameEmProcessamento = false;
     const dados = JSON.parse(evento.data);
     desenharRostos(dados.rostos || []);
     mostrarDeteccao(dados.rostos || []);
@@ -175,6 +184,7 @@ function conectarReconhecimento() {
       "Reconhecimento indisponível";
   };
   socket.onclose = () => {
+    frameEmProcessamento = false;
     document.getElementById("statusReconhecimento").textContent =
       "Reconhecimento desconectado";
     if (!reconexaoAgendada) {

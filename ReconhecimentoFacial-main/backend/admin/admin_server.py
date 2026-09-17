@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import tempfile
 import face_recognition
 from flask_cors import CORS
 
@@ -14,11 +16,27 @@ CORS(app)
 
 
 # O admin e o reconhecimento devem trabalhar com a mesma base de usuários.
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face_data.json")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+RECORDS_DIR = os.path.join(BASE_DIR, "records")
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(RECORDS_DIR, exist_ok=True)
+
+
+def migrar_dado(nome):
+    destino = os.path.join(DATA_DIR, nome)
+    legado = os.path.join(BASE_DIR, nome)
+    if not os.path.exists(destino) and os.path.exists(legado):
+        shutil.copy2(legado, destino)
+    return destino
+
+
+DATA_FILE = migrar_dado("face_data.json")
 ADMIN_DIR = os.path.dirname(os.path.abspath(__file__))
 FACE_PHOTO_DIR = os.path.join(os.path.dirname(DATA_FILE), "face_data")
-LOG_FILE = os.path.join(os.path.dirname(DATA_FILE), "registros.csv")
-LOG_DIR = os.path.join(os.path.dirname(DATA_FILE), "logs")
+LOG_FILE = migrar_dado("registros.csv")
+LATE_FILE = migrar_dado("atrasos.csv")
+LOG_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
     filename=os.path.join(LOG_DIR, "admin.log"),
@@ -27,8 +45,7 @@ logging.basicConfig(
     encoding="utf-8",
 )
 logger = logging.getLogger(__name__)
-LATE_FILE = os.path.join(os.path.dirname(DATA_FILE), "atrasos.csv")
-CONFIG_FILE = os.path.join(os.path.dirname(DATA_FILE), "config.json")
+CONFIG_FILE = migrar_dado("config.json")
 DEFAULT_CONFIG = {
     "manha_inicio": "07:30", "manha_atraso": "07:30", "manha_fim": "12:30",
     "tarde_inicio": "13:30", "tarde_atraso": "13:30", "tarde_fim": "17:25",
@@ -63,11 +80,22 @@ def ler_dados():
 # Salva os dados no arquivo JSON
 def salvar_dados(dados):
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(dados, f, indent=2)
-            logger.info("Base de pessoas salva: %s pessoa(s)", len(dados))
+        pasta = os.path.dirname(DATA_FILE)
+        arquivo_temporario = tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=pasta, delete=False
+        )
+        with arquivo_temporario as f:
+            json.dump(dados, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(arquivo_temporario.name, DATA_FILE)
+        logger.info("Base de pessoas salva: %s pessoa(s)", len(dados))
+        return True
     except Exception as e:
-            logger.exception("Erro ao salvar JSON")
+        logger.exception("Erro ao salvar JSON")
+        if "arquivo_temporario" in locals() and os.path.exists(arquivo_temporario.name):
+            os.remove(arquivo_temporario.name)
+        return False
 
 
 def ler_configuracao():
@@ -113,8 +141,6 @@ def atualizar_usuarios():
     novos_dados = request.get_json(silent=True)
     if not isinstance(novos_dados, list):
         return jsonify({"erro": "Envie uma lista de usuarios."}), 400
-    antigos = ler_dados()
-
     atualizados = ler_dados()
     for novo in novos_dados:
         nome_original = novo.get("nome_original", novo.get("nome"))
@@ -128,17 +154,10 @@ def atualizar_usuarios():
             existente["id"] = novo.get("identificacao", existente.get("id", existente["nome"]))
             continue
         elif novo.get("nome"):
-            atualizados.append({
-                "nome": novo["nome"],
-                "idade": novo.get("idade", ""),
-                "turma": novo.get("turma", novo.get("profissao", "")),
-                "profissao": novo.get("turma", novo.get("profissao", "")),
-                "tipo_pessoa": novo.get("tipo_pessoa", "Aluno"),
-                "id": novo.get("identificacao", novo["nome"]),
-                "encoding": [],
-            })
+            return jsonify({"erro": "Pessoa nova precisa ser adicionada com uma foto facial."}), 400
 
-    salvar_dados(atualizados)
+    if not salvar_dados(atualizados):
+        return jsonify({"erro": "Nao foi possivel salvar a base de pessoas."}), 500
     return jsonify({"mensagem": "Salvo com sucesso!"})
 
 
@@ -184,7 +203,8 @@ def adicionar_usuario():
         "foto": foto_relativa,
         "encoding": encoding,
     })
-    salvar_dados(dados)
+    if not salvar_dados(dados):
+        return jsonify({"erro": "Nao foi possivel salvar a base de pessoas."}), 500
     return jsonify({"mensagem": "Rosto adicionado com sucesso!", "usuario": usuario_publico(dados[-1])}), 201
 
 
@@ -194,7 +214,8 @@ def excluir_usuario(nome_original):
     restantes = [u for u in dados if u.get("nome") != nome_original]
     if len(restantes) == len(dados):
         return jsonify({"erro": "Usuario nao encontrado."}), 404
-    salvar_dados(restantes)
+    if not salvar_dados(restantes):
+        return jsonify({"erro": "Nao foi possivel salvar a base de pessoas."}), 500
     return jsonify({"mensagem": "Usuario removido com sucesso!"})
 
 
@@ -252,8 +273,14 @@ def configuracoes():
     for chave in DEFAULT_CONFIG:
         if chave in novos:
             configuracao[chave] = novos[chave]
-    with open(CONFIG_FILE, "w", encoding="utf-8") as arquivo:
-        json.dump(configuracao, arquivo, indent=2)
+    arquivo_temporario = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=os.path.dirname(CONFIG_FILE), delete=False
+    )
+    with arquivo_temporario as arquivo:
+        json.dump(configuracao, arquivo, indent=2, ensure_ascii=False)
+        arquivo.flush()
+        os.fsync(arquivo.fileno())
+    os.replace(arquivo_temporario.name, CONFIG_FILE)
     return jsonify(configuracao)
 
 

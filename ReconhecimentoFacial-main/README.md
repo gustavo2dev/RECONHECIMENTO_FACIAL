@@ -1,138 +1,65 @@
-# Sistema escolar de registro de entrada e atrasos
+# Sistema escolar de reconhecimento facial
 
-Sistema de reconhecimento facial em tempo real com visual corporativo, ideal para controle de acesso, demonstrações de IA ou estudos em visão computacional.
+Sistema Windows para monitorar a entrada escolar, reconhecer alunos, professores e funcionários e registrar atrasos de alunos.
 
-## 🎯 Funcionalidades
+## Estrutura
 
-- 📸 Câmera exibida dentro do monitor Electron, sem janela OpenCV separada
-- 🔍 Reconhecimento de alunos, professores e funcionários
-- 🟢 Caixa verde para cadastrados e vermelha para rostos não cadastrados
-- ⏰ Regras de atraso configuráveis para manhã e tarde
-- 📊 Dashboard com histórico, filtros, exportação CSV e configurações
-- 🌐 Comunicação de frames via WebSocket e logs em arquivo
-
----
-
-## 🧰 Tecnologias Usadas
-
-- Python 3.8+
-- OpenCV
-- dlib
-- face_recognition
-- asyncio + websockets
-- Flask (admin dashboard)
-
----
-
-## 📂 Estrutura do Projeto
-
-```
-camera-ia-app/
-├── backend/
-│   ├── server.py                # Reconhecimento facial em tempo real
-│   ├── salvar_rosto.py         # Cadastro opcional de novos rostos
-│   ├── face_data.json          # Dados dos usuários com encoding facial
-│   ├── shape_predictor_68_face_landmarks.dat
-│   ├── dlib_face_recognition_resnet_model_v1.dat
-│   └── admin/
-│       ├── admin_server.py     # API Flask para gerenciar os usuários
-│       ├── index.html          # Interface de gerenciamento
-│       └── styles.css
-└── README.md
+```text
+backend/
+  admin/              Painel Flask e APIs
+  data/               face_data.json, config.json e CSVs gerados
+    face_data/        Fotos dos cadastros
+  records/            Evidências de atrasos por data
+  logs/               Logs do reconhecimento e do painel
+  server.py           WebSocket e processamento facial
+  salvar_rosto.py     Cadastro manual opcional
+  *.dat               Modelos do dlib
+frontend/
+  index.html          Monitor da câmera
+  renderer.js         Webcam, WebSocket e interface
+  main.js             Janela Electron
+iniciar_windows.bat
+instalar_windows.bat
 ```
 
----
+## Instalação e início
 
-## 🚀 Como Executar no Windows
+1. Instale Python 3.10/3.11 e Node.js LTS.
+2. Execute `instalar_windows.bat`.
+3. Execute `iniciar_windows.bat`.
+4. Na tela Electron, clique em **Iniciar câmera**.
+5. O painel administrativo abre em `http://localhost:5000`.
 
-### 1. Instale os programas necessários
+Os servidores Python são iniciados minimizados. Erros ficam em `backend/logs/`.
 
-Instale:
+## Regras padrão
 
-- Python 3.10 ou 3.11 (marque **Add Python to PATH** durante a instalação)
-- Node.js LTS
-- Os drivers da sua webcam
+- Manhã: 07:30 até 12:30.
+- Tarde: 13:30 até 17:25.
+- Cooldown de registro por pessoa: 60 minutos.
+- Tolerância facial: 0.5.
 
-### 2. Instale as dependências
+Os horários, cooldown e tolerância podem ser alterados na aba **Configurações** do painel. A configuração ativa fica em `backend/data/config.json`.
 
-Na pasta `ReconhecimentoFacial-main`, dê duplo clique em `instalar_windows.bat`.
-Esse arquivo cria o ambiente virtual `.venv`, instala o backend e instala o Electron.
+Somente pessoas do tipo **Aluno** geram atraso. Professores e funcionários podem ser reconhecidos e registrados como passagem, mas não geram atraso escolar.
 
-> Se o `dlib` falhar, confirme que está usando Python 3.10 ou 3.11. O `face-recognition` depende dele.
+## Dados
 
-### 3. Modelos obrigatórios
+- Pessoas e encodings: `backend/data/face_data.json`.
+- Fotos dos cadastros: `backend/data/face_data/`.
+- Passagens: `backend/data/registros.csv`.
+- Atrasos: `backend/data/atrasos.csv`.
+- Evidências de atrasos: `backend/records/AAAA-MM-DD/`.
+- Logs: `backend/logs/`.
 
-O `instalar_windows.bat` baixa e extrai automaticamente os dois modelos para `backend/`.
-É necessário ter conexão com a internet durante a instalação.
+Rostos não cadastrados apenas aparecem com caixa vermelha. Eles não são salvos, não geram atraso e não entram em histórico.
 
-### 4. Inicie o sistema
+## Desempenho
 
-Dê duplo clique em `iniciar_windows.bat`. Ele inicia os serviços minimizados e abre a tela de monitoramento com a câmera dentro da aplicação.
-Os rostos que já estiverem em `backend\face_data.json` são aceitos automaticamente; não é necessário fazer outro cadastro.
+O backend mantém configurações e encodings em memória e recarrega os arquivos somente quando mudam. A comparação escolhe o encoding mais próximo dentro da tolerância configurada. O frontend envia um novo frame somente depois da resposta anterior, evitando fila e atraso acumulado.
 
-O arquivo `salvar_rosto.py` existe apenas para cadastro manual alternativo. O cadastro normal pode ser feito no painel administrativo.
+## Dependências principais
 
-### 5. Use o painel e a planilha
+Python: OpenCV, dlib-bin, face-recognition, NumPy, websockets, Flask e Flask-CORS.
 
-O painel administrativo abre automaticamente em [http://localhost:5000](http://localhost:5000). Ele usa o mesmo `backend\face_data.json` do reconhecimento.
-
-Quando um aluno autorizado for reconhecido no horário de atraso, o registro é salvo em `backend\atrasos.csv` e aparece no histórico. Passagens gerais ficam em `backend\registros.csv`.
-
-Rostos não cadastrados continuam aparecendo com caixa vermelha, mas não são salvos em disco. Evidências de atrasos ficam em `backend\registros\AAAA-MM-DD`. Logs ficam em `backend\logs\reconhecimento.log`.
-
-### Regras padrão
-
-- Manhã: 07:30 até 12:30, atraso a partir de 07:30.
-- Tarde: 13:30 até 17:25, atraso a partir de 13:30.
-- Cooldown padrão por pessoa: 60 minutos.
-
-Esses valores podem ser alterados na aba **Configurações** do painel em [http://localhost:5000](http://localhost:5000). Apenas pessoas do tipo **Aluno** geram atraso escolar; professores e funcionários apenas aparecem nas passagens.
-
----
-
-## 🧪 Exemplo de Interface
-
-📷 O rosto é detectado com um quadrado animado, e as informações aparecem em um balão com destaque. A barra superior exibe o status do acesso.
-
----
-
-## 📌 Sobre os Dados
-
-Os usuários são armazenados no arquivo `face_data.json` com:
-
-- Nome
-- Idade
-- Turma
-- Tipo de pessoa
-- Identificação
-- Encoding facial
-
----
-
-## 💡 Possíveis Melhorias
-
-- Armazenamento com banco de dados
-- Login e permissões por usuário
-- Deploy com Docker ou serverless
-- Integração com APIs de segurança/controle de entrada
-
----
-
-## 👨‍💻 Autor
-
-Feito com 💻 e dedicação por **Allison Joanine de Araujo Ribeiro**  
-📧 allisonjoanine@gmail.com  
-🔗 [LinkedIn](https://linkedin.com/in/allisonjoanine) • [GitHub](https://github.com/AllisonJoanine)
-
----
-
-## 📄 Licença
-
-Este projeto é de uso livre para fins educacionais e experimentais.
-
-```
-
----
-
-# by Allison Joanine de Araujo Ribeiro
-```
+Frontend: Electron.

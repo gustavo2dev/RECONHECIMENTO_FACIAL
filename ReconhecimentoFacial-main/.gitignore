@@ -1,18 +1,18 @@
-# Ignorar dependências e arquivos pesados
+# Dependências, modelos binários e artefatos locais
 node_modules/
+.venv/
 __pycache__/
 *.dat
-
-node_modules/
-*.dat
-node_modules/
-*.dat
+*.bz2
 *.zip
 *.exe
 *.mp4
 *.framework
-backend/registros.csv
-backend/atrasos.csv
-backend/config.json
+
+# Dados gerados e imagens pessoais
+backend/data/config.json
+backend/data/registros.csv
+backend/data/atrasos.csv
+backend/data/face_data/
+backend/records/
 backend/logs/
-backend/registros/

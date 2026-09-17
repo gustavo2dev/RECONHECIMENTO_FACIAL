@@ -3,6 +3,7 @@ import csv
 import logging
 import json
 import os
+import shutil
 from datetime import datetime, timedelta
 
 import cv2
@@ -12,11 +13,25 @@ import numpy as np
 import websockets
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, "face_data.json")
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
-LOG_FILE = os.path.join(BASE_DIR, "registros.csv")
-LATE_FILE = os.path.join(BASE_DIR, "atrasos.csv")
-EVIDENCE_DIR = os.path.join(BASE_DIR, "registros")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+RECORDS_DIR = os.path.join(BASE_DIR, "records")
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(RECORDS_DIR, exist_ok=True)
+
+
+def migrar_dado(nome):
+    destino = os.path.join(DATA_DIR, nome)
+    legado = os.path.join(BASE_DIR, nome)
+    if not os.path.exists(destino) and os.path.exists(legado):
+        shutil.copy2(legado, destino)
+    return destino
+
+
+DATA_FILE = migrar_dado("face_data.json")
+CONFIG_FILE = migrar_dado("config.json")
+LOG_FILE = migrar_dado("registros.csv")
+LATE_FILE = migrar_dado("atrasos.csv")
+EVIDENCE_DIR = RECORDS_DIR
 PREDICTOR_FILE = os.path.join(BASE_DIR, "shape_predictor_68_face_landmarks.dat")
 FACE_MODEL_FILE = os.path.join(BASE_DIR, "dlib_face_recognition_resnet_model_v1.dat")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -87,14 +102,22 @@ detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(PREDICTOR_FILE)
 face_rec_model = dlib.face_recognition_model_v1(FACE_MODEL_FILE)
 known_people = carregar_pessoas()
+known_encodings = np.array([pessoa["encoding"] for pessoa in known_people], dtype=np.float64)
 data_file_mtime = os.path.getmtime(DATA_FILE)
+config_cache = DEFAULT_CONFIG.copy()
+config_cache.update(carregar_json(CONFIG_FILE, {}))
+config_file_mtime = os.path.getmtime(CONFIG_FILE)
 last_logged = {}
 
 
 def config_atual():
-    configuracao = DEFAULT_CONFIG.copy()
-    configuracao.update(carregar_json(CONFIG_FILE, {}))
-    return configuracao
+    global config_cache, config_file_mtime
+    atual = os.path.getmtime(CONFIG_FILE)
+    if atual != config_file_mtime:
+        config_cache = DEFAULT_CONFIG.copy()
+        config_cache.update(carregar_json(CONFIG_FILE, {}))
+        config_file_mtime = atual
+    return config_cache
 
 
 def hora_minutos(valor):
@@ -164,10 +187,11 @@ def registrar_passagem(pessoa, frame, box):
 
 
 def recarregar_se_necessario():
-    global known_people, data_file_mtime
+    global known_people, known_encodings, data_file_mtime
     atual = os.path.getmtime(DATA_FILE)
     if atual != data_file_mtime:
         known_people = carregar_pessoas()
+        known_encodings = np.array([pessoa["encoding"] for pessoa in known_people], dtype=np.float64)
         data_file_mtime = atual
 
 
@@ -177,17 +201,17 @@ def processar_frame(frame):
     rgb = cv2.cvtColor(pequeno, cv2.COLOR_BGR2RGB)
     rostos = []
     faces = detector(rgb)
-    conhecido = [np.array(pessoa["encoding"]) for pessoa in known_people]
     tolerancia = float(config_atual()["tolerancia"])
     for face in faces:
         shape = predictor(rgb, face)
         encoding = np.array(face_rec_model.compute_face_descriptor(rgb, shape))
         top, right, bottom, left = face.top() * 4, face.right() * 4, face.bottom() * 4, face.left() * 4
         pessoa = None
-        if conhecido:
-            matches = face_recognition.compare_faces(conhecido, encoding, tolerance=tolerancia)
-            if True in matches:
-                pessoa = known_people[matches.index(True)]
+        if len(known_encodings):
+            distancias = face_recognition.face_distance(known_encodings, encoding)
+            melhor_indice = int(np.argmin(distancias))
+            if float(distancias[melhor_indice]) <= tolerancia:
+                pessoa = known_people[melhor_indice]
         box = [top, right, bottom, left]
         if pessoa:
             registro = registrar_passagem(pessoa, frame, box)
