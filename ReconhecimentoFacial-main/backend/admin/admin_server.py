@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory, send_file
+import csv
 import json
 import os
 from flask_cors import CORS
@@ -10,6 +11,18 @@ CORS(app)
 
 # O admin e o reconhecimento devem trabalhar com a mesma base de usuários.
 DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face_data.json")
+ADMIN_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(os.path.dirname(DATA_FILE), "registros.csv")
+
+
+@app.route("/")
+def pagina_inicial():
+    return send_from_directory(ADMIN_DIR, "index.html")
+
+
+@app.route("/styles.css")
+def estilos():
+    return send_from_directory(ADMIN_DIR, "styles.css")
 
 # Lê os dados do arquivo JSON
 def ler_dados():
@@ -42,6 +55,7 @@ def listar_usuarios():
     usuarios_simplificados = [
         {
             "nome": u.get("nome", ""),
+            "nome_original": u.get("nome", ""),
             "idade": u.get("idade", ""),
             "profissao": u.get("profissao", "")
         } for u in dados if "nome" in u
@@ -52,22 +66,45 @@ def listar_usuarios():
 # Atualiza os dados dos usuários
 @app.route("/usuarios", methods=["POST"])
 def atualizar_usuarios():
-    novos_dados = request.json
+    novos_dados = request.get_json(silent=True)
+    if not isinstance(novos_dados, list):
+        return jsonify({"erro": "Envie uma lista de usuarios."}), 400
     antigos = ler_dados()
 
     atualizados = []
     for novo in novos_dados:
-        existente = next((x for x in antigos if x.get("nome") == novo["nome"]), None)
+        nome_original = novo.get("nome_original", novo.get("nome"))
+        existente = next((x for x in antigos if x.get("nome") == nome_original), None)
         if existente:
-            existente["idade"] = novo["idade"]
-            existente["profissao"] = novo["profissao"]
+            existente["idade"] = novo.get("idade", "")
+            existente["profissao"] = novo.get("profissao", "")
             atualizados.append(existente)
-        else:
-            novo["encoding"] = []  # opcional: pode deixar vazio
-            atualizados.append(novo)
+        elif novo.get("nome"):
+            atualizados.append({
+                "nome": novo["nome"],
+                "idade": novo.get("idade", ""),
+                "profissao": novo.get("profissao", ""),
+                "encoding": [],
+            })
 
     salvar_dados(atualizados)
     return jsonify({"mensagem": "Salvo com sucesso!"})
+
+
+@app.route("/registros", methods=["GET"])
+def listar_registros():
+    if not os.path.exists(LOG_FILE):
+        return jsonify([])
+    with open(LOG_FILE, "r", encoding="utf-8-sig", newline="") as arquivo:
+        return jsonify(list(csv.DictReader(arquivo, delimiter=";")))
+
+
+@app.route("/registros.csv", methods=["GET"])
+def baixar_registros():
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w", newline="", encoding="utf-8-sig") as arquivo:
+            csv.writer(arquivo, delimiter=";").writerow(["Data", "Horario", "Nome", "Idade", "Profissao"])
+    return send_file(LOG_FILE, as_attachment=True, download_name="registros_reconhecimento.csv")
 
 
 if __name__ == "__main__":

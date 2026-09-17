@@ -32,7 +32,7 @@ Sistema de reconhecimento facial em tempo real com visual corporativo, ideal par
 camera-ia-app/
 ├── backend/
 │   ├── server.py                # Reconhecimento facial em tempo real
-│   ├── salvar_rosto.py         # Cadastro de novos rostos
+│   ├── salvar_rosto.py         # Cadastro opcional de novos rostos
 │   ├── face_data.json          # Dados dos usuários com encoding facial
 │   ├── shape_predictor_68_face_landmarks.dat
 │   ├── dlib_face_recognition_resnet_model_v1.dat
@@ -67,21 +67,18 @@ Esse arquivo cria o ambiente virtual `.venv`, instala o backend e instala o Elec
 O `instalar_windows.bat` baixa e extrai automaticamente os dois modelos para `backend/`.
 É necessário ter conexão com a internet durante a instalação.
 
-### 4. Cadastre seu rosto
+### 4. Inicie o sistema
 
-`python backend\salvar_rosto.py`
+Dê duplo clique em `iniciar_windows.bat`. Ele abre o reconhecimento, o painel administrativo e a aplicação Electron.
+Os rostos que já estiverem em `backend\face_data.json` são aceitos automaticamente; não é necessário fazer outro cadastro.
 
-Digite suas informações, posicione o rosto na câmera e pressione `c` para capturar.
+O arquivo `salvar_rosto.py` existe apenas para cadastrar uma pessoa nova quando necessário.
 
-### 5. Inicie o reconhecimento facial
-
-Depois, dê duplo clique em `iniciar_windows.bat`. Ele abre o reconhecimento, o painel administrativo e a aplicação Electron.
-
-### 6. (Opcional) Use o painel de gerenciamento
+### 5. Use o painel e a planilha
 
 O painel administrativo abre automaticamente em [http://localhost:5000](http://localhost:5000). Ele usa o mesmo `backend\face_data.json` do reconhecimento.
 
-Abra [http://localhost:5000](http://localhost:5000) no navegador.
+Quando um rosto autorizado for reconhecido, o horário é salvo automaticamente em `backend\registros.csv`, que pode ser aberto no Excel pelo botão **Baixar planilha**.
 
 ---
 

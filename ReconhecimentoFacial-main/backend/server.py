@@ -6,9 +6,12 @@ import asyncio
 import websockets
 import json
 import os
+import csv
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "face_data.json")
+LOG_FILE = os.path.join(BASE_DIR, "registros.csv")
 PREDICTOR_FILE = os.path.join(BASE_DIR, "shape_predictor_68_face_landmarks.dat")
 FACE_MODEL_FILE = os.path.join(BASE_DIR, "dlib_face_recognition_resnet_model_v1.dat")
 
@@ -23,8 +26,31 @@ for model_file in (PREDICTOR_FILE, FACE_MODEL_FILE):
 with open(DATA_FILE, "r", encoding="utf-8") as f:
     face_data = json.load(f)
 
-known_encodings = [np.array(p["encoding"]) for p in face_data]
-known_info = [(p["nome"], p["idade"], p["profissao"]) for p in face_data]
+known_people = [p for p in face_data if len(p.get("encoding", [])) == 128]
+known_encodings = [np.array(p["encoding"]) for p in known_people]
+known_info = [(p["nome"], p["idade"], p["profissao"]) for p in known_people]
+last_logged = {}
+
+
+def registrar_acesso(nome, idade, profissao):
+    agora = datetime.now()
+    ultimo_registro = last_logged.get(nome)
+    if ultimo_registro and (agora - ultimo_registro).total_seconds() < 60:
+        return
+
+    arquivo_novo = not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0
+    with open(LOG_FILE, "a", newline="", encoding="utf-8-sig") as arquivo:
+        writer = csv.writer(arquivo, delimiter=";")
+        if arquivo_novo:
+            writer.writerow(["Data", "Horario", "Nome", "Idade", "Profissao"])
+        writer.writerow([
+            agora.strftime("%d/%m/%Y"),
+            agora.strftime("%H:%M:%S"),
+            nome,
+            idade,
+            profissao,
+        ])
+    last_logged[nome] = agora
 
 # Modelos
 
@@ -73,6 +99,7 @@ async def handler(websocket, *args):
             if True in matches:
                 match_index = matches.index(True)
                 name, idade, profissao = known_info[match_index]
+                registrar_acesso(name, idade, profissao)
                 acesso_liberado = True
                 status_cor = (0, 255, 0)
                 status_icone = "✔"

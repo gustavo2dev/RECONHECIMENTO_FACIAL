@@ -11,3 +11,4 @@ node_modules/
 *.exe
 *.mp4
 *.framework
+backend/registros.csv

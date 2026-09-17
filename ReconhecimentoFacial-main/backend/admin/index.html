@@ -1,77 +1,138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Gerenciar Usuários</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>Usuários Cadastrados</h1>
-  <table id="tabelaUsuarios">
-    <thead>
-      <tr>
-        <th>Nome</th>
-        <th>Idade</th>
-        <th>Profissão</th>
-        <th>Ações</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Painel de reconhecimento</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">CONTROLE DE ACESSO</p>
+        <h1>Painel de reconhecimento</h1>
+        <p class="subtitulo">
+          Rostos já presentes no projeto são aceitos automaticamente.
+        </p>
+      </div>
+      <a class="download" href="/registros.csv">Baixar planilha</a>
+    </header>
+    <section class="resumo">
+      <strong id="totalRegistros">0</strong>
+      <span>registros de acesso</span>
+    </section>
+    <h2>Usuários autorizados</h2>
+    <table id="tabelaUsuarios">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Idade</th>
+          <th>Profissão</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="4">Carregando...</td>
+        </tr>
+      </tbody>
+    </table>
 
-  <script>
-    let usuarios = [];
-  
-    async function carregarUsuarios() {
-      try {
-        const res = await fetch('http://localhost:5000/usuarios');
-        usuarios = await res.json();
-        console.log("Usuários recebidos:", usuarios);
-        renderizarTabela();
-      } catch (err) {
-        console.error("Erro ao buscar usuários:", err);
+    <h2>Últimos acessos</h2>
+    <table id="tabelaRegistros">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Horário</th>
+          <th>Nome</th>
+          <th>Idade</th>
+          <th>Profissão</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="5">Carregando...</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <script>
+      let usuarios = [];
+
+      async function carregarUsuarios() {
+        try {
+          const res = await fetch("/usuarios");
+          if (!res.ok) throw new Error("Falha ao carregar usuários");
+          usuarios = await res.json();
+          console.log("Usuários recebidos:", usuarios);
+          renderizarTabela();
+        } catch (err) {
+          document.querySelector("#tabelaUsuarios tbody").innerHTML =
+            '<tr><td colspan="4">Não foi possível carregar os usuários.</td></tr>';
+        }
       }
-    }
-  
-    function renderizarTabela() {
-      const tbody = document.querySelector("#tabelaUsuarios tbody");
-      tbody.innerHTML = "";
-  
-      usuarios.forEach((u, i) => {
-        const linha = document.createElement("tr");
-  
-        linha.innerHTML = `
+
+      function renderizarTabela() {
+        const tbody = document.querySelector("#tabelaUsuarios tbody");
+        tbody.innerHTML = "";
+
+        usuarios.forEach((u, i) => {
+          const linha = document.createElement("tr");
+
+          linha.innerHTML = `
           <td contenteditable="true" oninput="usuarios[${i}].nome = this.innerText">${u.nome}</td>
           <td contenteditable="true" oninput="usuarios[${i}].idade = this.innerText">${u.idade}</td>
           <td contenteditable="true" oninput="usuarios[${i}].profissao = this.innerText">${u.profissao}</td>
           <td><button onclick="removerUsuario(${i})">Excluir</button></td>
         `;
-  
-        tbody.appendChild(linha);
-      });
-    }
-  
-    function removerUsuario(index) {
-      if (confirm("Deseja realmente excluir este usuário?")) {
-        usuarios.splice(index, 1);
-        salvarUsuarios();
-        renderizarTabela();
+
+          tbody.appendChild(linha);
+        });
       }
-    }
-  
-    function salvarUsuarios() {
-      fetch("http://localhost:5000/usuarios", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(usuarios)
-      })
-        .then(() => alert("Alterações salvas com sucesso!"))
-        .catch(err => alert("Erro ao salvar: " + err));
-    }
-  
-    window.onload = carregarUsuarios;
-  </script>
-  
-  
-</body>
+
+      function removerUsuario(index) {
+        if (confirm("Deseja realmente excluir este usuário?")) {
+          usuarios.splice(index, 1);
+          salvarUsuarios();
+          renderizarTabela();
+        }
+      }
+
+      function salvarUsuarios() {
+        fetch("/usuarios", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(usuarios),
+        })
+          .then(async (response) => {
+            if (!response.ok) throw new Error("Falha ao salvar");
+            alert("Alterações salvas com sucesso!");
+          })
+          .catch((err) => alert("Erro ao salvar: " + err.message));
+      }
+
+      async function carregarRegistros() {
+        const resposta = await fetch("/registros");
+        const registros = await resposta.json();
+        document.querySelector("#totalRegistros").textContent =
+          registros.length;
+        const tbody = document.querySelector("#tabelaRegistros tbody");
+        tbody.innerHTML = registros.length
+          ? registros
+              .slice(-20)
+              .reverse()
+              .map(
+                (r) => `
+      <tr><td>${r.Data}</td><td>${r.Horario}</td><td>${r.Nome}</td><td>${r.Idade}</td><td>${r.Profissao}</td></tr>
+    `,
+              )
+              .join("")
+          : '<tr><td colspan="5">Nenhum acesso registrado ainda.</td></tr>';
+      }
+
+      window.onload = () => {
+        carregarUsuarios();
+        carregarRegistros();
+      };
+    </script>
+  </body>
 </html>
