@@ -1,0 +1,13 @@
+# Ignorar dependências e arquivos pesados
+node_modules/
+__pycache__/
+*.dat
+
+node_modules/
+*.dat
+node_modules/
+*.dat
+*.zip
+*.exe
+*.mp4
+*.framework
