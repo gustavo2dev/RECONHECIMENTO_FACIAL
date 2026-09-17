@@ -2,9 +2,11 @@ import cv2
 import face_recognition
 import json
 import os
+import re
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ARQUIVO_JSON = os.path.join(BASE_DIR, "face_data.json")
+PASTA_FOTOS = os.path.join(BASE_DIR, "face_data")
 
 def carregar_base():
     if os.path.exists(ARQUIVO_JSON):
@@ -52,7 +54,9 @@ def main():
     print("=== Cadastro Facial ===")
     nome = input("Nome completo: ")
     idade = input("Idade: ")
-    profissao = input("Profissão: ")
+    tipo_pessoa = input("Tipo (Aluno/Professor/Funcionario): ") or "Aluno"
+    turma = input("Turma (deixe vazio para professor/funcionario): ")
+    identificacao = input("Identificação: ") or nome
 
     frame = capturar_rosto()
     encoding = processar_rosto(frame)
@@ -60,10 +64,19 @@ def main():
     if encoding is None:
         return
 
+    os.makedirs(PASTA_FOTOS, exist_ok=True)
+    nome_seguro = re.sub(r"[^A-Za-z0-9_-]+", "_", identificacao).strip("_") or "pessoa"
+    foto_path = os.path.join(PASTA_FOTOS, f"{nome_seguro}.jpg")
+    cv2.imwrite(foto_path, frame)
+
     nova_pessoa = {
         "nome": nome,
         "idade": idade,
-        "profissao": profissao,
+        "turma": turma,
+        "profissao": turma,
+        "tipo_pessoa": tipo_pessoa,
+        "id": identificacao,
+        "foto": os.path.join("face_data", f"{nome_seguro}.jpg"),
         "encoding": encoding
     }
 

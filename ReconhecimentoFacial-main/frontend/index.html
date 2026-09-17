@@ -1,90 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Reconhecimento Facial</title>
-  <link rel="stylesheet" href="styles.css">
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-    }
-  
-    video, canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-    }
-  
-    video {
-      z-index: 1;
-    }
-  
-    canvas {
-      z-index: 2;
-      pointer-events: none;
-    }
-  </style>
-  
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monitoramento escolar</title>
-</head>
-<body>
-  <main class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">ENTRADA ESCOLAR</p>
-        <h1>Monitoramento de acesso</h1>
-      </div>
-      <div class="clock-block">
-        <span id="dataAtual">--/--/----</span>
-        <strong id="horaAtual">--:--:--</strong>
-      </div>
-    </header>
-
-    <section class="status-strip">
-      <span id="statusCamera" class="status-dot offline"></span>
-      <span id="statusCameraTexto">Conectando câmera...</span>
-      <span class="separator">|</span>
-      <span id="statusReconhecimento">Aguardando rosto</span>
-    </section>
-
-    <section class="workspace">
-      <div class="camera-panel">
-        <div class="panel-heading"><span>VISÃO DA CÂMERA</span><span id="fpsStatus">ao vivo</span></div>
-        <div class="camera-stage">
-          <video id="webcam" autoplay playsinline muted></video>
-          <canvas id="overlay"></canvas>
-          <div id="cameraError" class="camera-error" hidden>Não foi possível acessar a câmera.</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitoramento escolar</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ENTRADA ESCOLAR</p>
+          <h1>Monitoramento de acesso</h1>
         </div>
-        <div id="notificacao" class="notification" hidden></div>
-      </div>
-      <aside class="info-panel">
-        <div class="panel-heading">ÚLTIMA DETECÇÃO</div>
-        <div id="ultimaDeteccao" class="empty-state">Aguardando reconhecimento...</div>
-        <div class="last-entry"><span>Último registro</span><strong id="ultimoRegistro">Nenhum ainda</strong></div>
-      </aside>
-    </section>
-
-    <section class="stats-grid">
-      <article><span>Alunos reconhecidos hoje</span><strong id="statAlunos">0</strong></article>
-      <article><span>Atrasos registrados hoje</span><strong id="statAtrasos">0</strong></article>
-      <article><span>Professores reconhecidos</span><strong id="statProfessores">0</strong></article>
-      <article><span>Funcionários reconhecidos</span><strong id="statFuncionarios">0</strong></article>
-    </section>
-    <p class="admin-link"><a href="http://localhost:5000" target="_blank">Abrir painel administrativo</a></p>
-  </main>
-  <script src="renderer.js"></script>
-</body>
-</html>
-  
-</head>
-<body>
-  <video id="webcam" autoplay playsinline></video>
-  <canvas id="overlay"></canvas>
-  <script src="renderer.js"></script>
-</body>
+        <div class="clock-block">
+          <span id="dataAtual">--/--/----</span
+          ><strong id="horaAtual">--:--:--</strong>
+        </div>
+      </header>
+      <section class="status-strip">
+        <span id="statusCamera" class="status-dot offline"></span
+        ><span id="statusCameraTexto">Câmera parada</span>
+        <span class="separator">|</span
+        ><span id="statusReconhecimento">Reconhecimento desconectado</span>
+        <button id="botaoCamera" class="camera-toggle" type="button">
+          Iniciar câmera
+        </button>
+      </section>
+      <section class="workspace">
+        <div class="camera-panel">
+          <div class="panel-heading">
+            <span>VISÃO DA CÂMERA</span
+            ><span id="fpsStatus">aguardando início</span>
+          </div>
+          <div class="camera-stage">
+            <video id="webcam" autoplay playsinline muted></video
+            ><canvas id="overlay"></canvas>
+            <div id="cameraError" class="camera-error" hidden></div>
+          </div>
+          <div id="notificacao" class="notification" hidden></div>
+        </div>
+        <aside class="info-panel">
+          <div class="panel-heading">ÚLTIMA DETECÇÃO</div>
+          <div id="ultimaDeteccao" class="empty-state">
+            Clique em “Iniciar câmera”.
+          </div>
+          <div class="last-entry">
+            <span>Último atraso registrado</span
+            ><strong id="ultimoRegistro">Nenhum ainda</strong>
+          </div>
+        </aside>
+      </section>
+      <section class="stats-grid">
+        <article>
+          <span>Alunos reconhecidos hoje</span
+          ><strong id="statAlunos">0</strong>
+        </article>
+        <article>
+          <span>Atrasos registrados hoje</span
+          ><strong id="statAtrasos">0</strong>
+        </article>
+        <article>
+          <span>Professores reconhecidos</span
+          ><strong id="statProfessores">0</strong>
+        </article>
+        <article>
+          <span>Funcionários reconhecidos</span
+          ><strong id="statFuncionarios">0</strong>
+        </article>
+        <article>
+          <span>Rostos não cadastrados</span
+          ><strong id="statDesconhecidos">0</strong>
+        </article>
+      </section>
+      <p class="admin-link">
+        <a href="http://localhost:5000" target="_blank"
+          >Abrir painel administrativo</a
+        >
+      </p>
+    </main>
+    <script src="renderer.js"></script>
+  </body>
 </html>

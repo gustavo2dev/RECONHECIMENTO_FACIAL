@@ -3,10 +3,13 @@ const canvas = document.getElementById("overlay");
 const context = canvas.getContext("2d");
 const frameCanvas = document.createElement("canvas");
 const frameContext = frameCanvas.getContext("2d");
+const botaoCamera = document.getElementById("botaoCamera");
 
 let socket = null;
 let stream = null;
 let envioAtivo = false;
+let cameraSolicitada = false;
+let reconexaoAgendada = false;
 let ultimaNotificacao = "";
 
 function atualizarRelogio() {
@@ -17,15 +20,23 @@ function atualizarRelogio() {
     agora.toLocaleTimeString("pt-BR");
 }
 
-function statusCamera(online, texto) {
+function atualizarStatusCamera(online, texto) {
   const indicador = document.getElementById("statusCamera");
   indicador.className = `status-dot ${online ? "online" : "offline"}`;
   document.getElementById("statusCameraTexto").textContent = texto;
+  botaoCamera.textContent = online ? "Parar câmera" : "Iniciar câmera";
+  botaoCamera.classList.toggle("stop", online);
+}
+
+function mostrarErroCamera(texto) {
+  const erro = document.getElementById("cameraError");
+  erro.textContent = texto;
+  erro.hidden = !texto;
 }
 
 function desenharRostos(rostos) {
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = video.videoWidth || 1;
+  canvas.height = video.videoHeight || 1;
   context.clearRect(0, 0, canvas.width, canvas.height);
   for (const rosto of rostos) {
     const cor = rosto.reconhecido ? "#38d996" : "#ff756d";
@@ -52,9 +63,13 @@ function mostrarDeteccao(rostos) {
   const rosto = rostos[0];
   if (!rosto) {
     area.className = "empty-state";
-    area.textContent = "Aguardando reconhecimento...";
+    area.textContent = cameraSolicitada
+      ? "Aguardando rosto..."
+      : "Clique em “Iniciar câmera”.";
     document.getElementById("statusReconhecimento").textContent =
-      "Aguardando rosto";
+      socket?.readyState === WebSocket.OPEN
+        ? "Aguardando rosto"
+        : "Reconhecimento desconectado";
     return;
   }
   area.className = `person-card ${rosto.reconhecido ? "known" : "unknown"}`;
@@ -64,8 +79,7 @@ function mostrarDeteccao(rostos) {
   document.getElementById("statusReconhecimento").textContent =
     rosto.reconhecido ? `${rosto.nome} identificado` : "Rosto não cadastrado";
   if (
-    rosto.novo_registro &&
-    rosto.novo_registro.atraso &&
+    rosto.novo_registro?.atraso &&
     rosto.novo_registro.nome !== ultimaNotificacao
   ) {
     ultimaNotificacao = rosto.novo_registro.nome;
@@ -83,6 +97,8 @@ function mostrarDeteccao(rostos) {
 
 async function iniciarCamera() {
   if (stream) return;
+  cameraSolicitada = true;
+  mostrarErroCamera("");
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -90,34 +106,49 @@ async function iniciarCamera() {
     });
     video.srcObject = stream;
     await video.play();
-    statusCamera(true, "Câmera funcionando");
-    document.getElementById("cameraError").hidden = true;
+    atualizarStatusCamera(
+      true,
+      socket?.readyState === WebSocket.OPEN
+        ? "Câmera funcionando"
+        : "Câmera funcionando; aguardando reconhecimento",
+    );
+    document.getElementById("fpsStatus").textContent = "ao vivo";
     iniciarEnvioFrames();
   } catch (erro) {
-    statusCamera(false, "Câmera desconectada");
-    document.getElementById("cameraError").hidden = false;
+    stream = null;
+    atualizarStatusCamera(false, "Câmera indisponível");
+    mostrarErroCamera(
+      "Não foi possível acessar a câmera. Verifique a permissão e se ela está conectada.",
+    );
     console.error("Falha na câmera", erro);
   }
+}
+
+function pararCamera() {
+  cameraSolicitada = false;
+  envioAtivo = false;
+  if (stream) stream.getTracks().forEach((track) => track.stop());
+  stream = null;
+  video.srcObject = null;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  atualizarStatusCamera(false, "Câmera parada");
+  document.getElementById("fpsStatus").textContent = "aguardando início";
+  mostrarDeteccao([]);
 }
 
 function iniciarEnvioFrames() {
   if (envioAtivo) return;
   envioAtivo = true;
   const enviar = () => {
-    if (
-      video.readyState >= 2 &&
-      socket &&
-      socket.readyState === WebSocket.OPEN
-    ) {
+    if (!envioAtivo) return;
+    if (video.readyState >= 2 && socket?.readyState === WebSocket.OPEN) {
       frameCanvas.width = video.videoWidth;
       frameCanvas.height = video.videoHeight;
       frameContext.drawImage(video, 0, 0);
       frameCanvas.toBlob(
-        (blob) =>
-          blob &&
-          socket &&
-          socket.readyState === WebSocket.OPEN &&
-          socket.send(blob),
+        (blob) => {
+          if (blob && socket?.readyState === WebSocket.OPEN) socket.send(blob);
+        },
         "image/jpeg",
         0.72,
       );
@@ -130,37 +161,51 @@ function iniciarEnvioFrames() {
 function conectarReconhecimento() {
   socket = new WebSocket("ws://localhost:8765");
   socket.onopen = () => {
-    statusCamera(true, "Câmera e reconhecimento conectados");
-    iniciarCamera();
+    document.getElementById("statusReconhecimento").textContent =
+      cameraSolicitada ? "Reconhecimento conectado" : "Reconhecimento pronto";
+    if (cameraSolicitada) atualizarStatusCamera(true, "Câmera funcionando");
   };
   socket.onmessage = (evento) => {
     const dados = JSON.parse(evento.data);
     desenharRostos(dados.rostos || []);
     mostrarDeteccao(dados.rostos || []);
   };
-  socket.onerror = () =>
-    statusCamera(false, "Servidor de reconhecimento indisponível");
+  socket.onerror = () => {
+    document.getElementById("statusReconhecimento").textContent =
+      "Reconhecimento indisponível";
+  };
   socket.onclose = () => {
-    statusCamera(false, "Reconhecimento desconectado");
-    setTimeout(conectarReconhecimento, 3000);
+    document.getElementById("statusReconhecimento").textContent =
+      "Reconhecimento desconectado";
+    if (!reconexaoAgendada) {
+      reconexaoAgendada = true;
+      setTimeout(() => {
+        reconexaoAgendada = false;
+        conectarReconhecimento();
+      }, 3000);
+    }
   };
 }
 
 async function atualizarDashboard() {
   try {
-    const resposta = await fetch("http://localhost:5000/dashboard");
-    const dados = await resposta.json();
+    const dados = await (await fetch("http://localhost:5000/dashboard")).json();
     document.getElementById("statAlunos").textContent =
       dados.alunos_reconhecidos;
     document.getElementById("statAtrasos").textContent = dados.atrasos;
     document.getElementById("statProfessores").textContent = dados.professores;
     document.getElementById("statFuncionarios").textContent =
       dados.funcionarios;
+    document.getElementById("statDesconhecidos").textContent =
+      dados.rostos_nao_cadastrados;
   } catch (erro) {
     console.warn("Dashboard indisponível", erro);
   }
 }
 
+botaoCamera.addEventListener("click", () =>
+  stream ? pararCamera() : iniciarCamera(),
+);
 setInterval(atualizarRelogio, 1000);
 setInterval(atualizarDashboard, 10000);
 atualizarRelogio();

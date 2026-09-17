@@ -2,7 +2,9 @@ from flask import Flask, jsonify, request, send_from_directory, send_file
 import csv
 import io
 import json
+import logging
 import os
+import re
 import face_recognition
 from flask_cors import CORS
 
@@ -14,7 +16,17 @@ CORS(app)
 # O admin e o reconhecimento devem trabalhar com a mesma base de usuários.
 DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face_data.json")
 ADMIN_DIR = os.path.dirname(os.path.abspath(__file__))
+FACE_PHOTO_DIR = os.path.join(os.path.dirname(DATA_FILE), "face_data")
 LOG_FILE = os.path.join(os.path.dirname(DATA_FILE), "registros.csv")
+LOG_DIR = os.path.join(os.path.dirname(DATA_FILE), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    filename=os.path.join(LOG_DIR, "admin.log"),
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    encoding="utf-8",
+)
+logger = logging.getLogger(__name__)
 LATE_FILE = os.path.join(os.path.dirname(DATA_FILE), "atrasos.csv")
 CONFIG_FILE = os.path.join(os.path.dirname(DATA_FILE), "config.json")
 DEFAULT_CONFIG = {
@@ -53,9 +65,9 @@ def salvar_dados(dados):
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(dados, f, indent=2)
-            print("💾 Dados salvos com sucesso.")
+            logger.info("Base de pessoas salva: %s pessoa(s)", len(dados))
     except Exception as e:
-        print("❌ Erro ao salvar JSON:", e)
+            logger.exception("Erro ao salvar JSON")
 
 
 def ler_configuracao():
@@ -147,13 +159,20 @@ def adicionar_usuario():
         return jsonify({"erro": "Ja existe um usuario com esse nome."}), 409
 
     try:
-        imagem_rgb = face_recognition.load_image_file(io.BytesIO(imagem.read()))
+        imagem_bytes = imagem.read()
+        imagem_rgb = face_recognition.load_image_file(io.BytesIO(imagem_bytes))
         localizacoes = face_recognition.face_locations(imagem_rgb)
         if len(localizacoes) != 1:
             return jsonify({"erro": "A imagem precisa ter exatamente um rosto."}), 400
         encoding = face_recognition.face_encodings(imagem_rgb, localizacoes)[0].tolist()
     except Exception as erro:
         return jsonify({"erro": f"Nao foi possivel processar a imagem: {erro}"}), 400
+
+    os.makedirs(FACE_PHOTO_DIR, exist_ok=True)
+    identificacao_segura = re.sub(r"[^A-Za-z0-9_-]+", "_", identificacao).strip("_") or "pessoa"
+    foto_relativa = os.path.join("face_data", f"{identificacao_segura}.jpg")
+    with open(os.path.join(os.path.dirname(DATA_FILE), foto_relativa), "wb") as arquivo:
+        arquivo.write(imagem_bytes)
 
     dados.append({
         "nome": nome,
@@ -162,6 +181,7 @@ def adicionar_usuario():
         "profissao": turma,
         "tipo_pessoa": tipo_pessoa,
         "id": identificacao,
+        "foto": foto_relativa,
         "encoding": encoding,
     })
     salvar_dados(dados)

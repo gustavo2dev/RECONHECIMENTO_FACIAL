@@ -1,26 +1,3 @@
-body {
-  margin: 0;
-  overflow: hidden;
-}
-
-video,
-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
-}
-
-video {
-  z-index: 1;
-}
-
-canvas {
-  z-index: 2;
-  pointer-events: none;
-}
 :root {
   color-scheme: dark;
   --bg: #0e1716;
@@ -105,6 +82,22 @@ h1 {
 .status-dot.online {
   background: var(--green);
   box-shadow: 0 0 12px var(--green);
+}
+.camera-toggle {
+  margin-left: auto;
+  padding: 8px 13px;
+  border: 1px solid var(--green);
+  border-radius: 5px;
+  color: var(--green);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.camera-toggle:hover,
+.camera-toggle.stop {
+  color: #07100e;
+  background: var(--green);
 }
 .separator {
   color: var(--line);
@@ -214,7 +207,7 @@ h1 {
 }
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-top: 18px;
 }
@@ -238,6 +231,11 @@ h1 {
 .admin-link a {
   color: var(--green);
   text-decoration: none;
+}
+@media (max-width: 1050px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 @media (max-width: 800px) {
   .workspace {
